@@ -1,0 +1,49 @@
+# =========================
+# 1. AI & SLM Model
+# =========================
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+*.zip
+*.tar.gz
+models/
+weights/
+
+data/*.csv
+data/*.log
+data/*.txt
+!data/*.json 
+
+.ipynb_checkpoints/
+
+# =========================
+# 2. Python & Backend (FastAPI)
+# =========================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+env/
+.env
+.env.*
+
+# =========================
+# 3. Frontend (Next.js)
+# =========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.env.local
+
+# =========================
+# 4. OS & Editor Files
+# =========================
+
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
