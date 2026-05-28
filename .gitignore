@@ -15,7 +15,8 @@ weights/
 data/*.csv
 data/*.log
 data/*.txt
-!data/*.json 
+!data/*.json
+data/chroma_playbooks/
 
 .ipynb_checkpoints/
 

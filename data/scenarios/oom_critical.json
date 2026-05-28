@@ -1,0 +1,31 @@
+{
+  "scenario": "oom_critical",
+  "description": "Kubernetes worker-api memory leak escalating to OOMKill",
+  "logs": [
+    {
+      "delay": 0,
+      "level": "INFO",
+      "message": "worker-api pod started successfully on node worker-3"
+    },
+    {
+      "delay": 2,
+      "level": "INFO",
+      "message": "worker-api processing requests normally, heap 128Mi/256Mi"
+    },
+    {
+      "delay": 2,
+      "level": "WARN",
+      "message": "worker-api memory usage rising: 78% of 256Mi limit"
+    },
+    {
+      "delay": 2,
+      "level": "ERROR",
+      "message": "worker-api memory usage critical: 94% of 256Mi limit, GC thrashing"
+    },
+    {
+      "delay": 3,
+      "level": "FATAL",
+      "message": "OOMKilled: pod/worker-api exceeded memory limit 256Mi restarts=14"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "scenario": "oom_critical",
+  "pods": {
+    "worker-api-7d9f8b-xk2q": {
+      "name": "worker-api-7d9f8b-xk2q",
+      "namespace": "production",
+      "status": "OOMKilled",
+      "restarts": 14,
+      "memory_usage": "256Mi",
+      "memory_limit": "256Mi",
+      "node": "worker-3",
+      "age": "2d",
+      "ready": "0/1"
+    }
+  },
+  "deployments": {
+    "worker-api": {
+      "name": "worker-api",
+      "namespace": "production",
+      "status": "Degraded",
+      "replicas": 1,
+      "ready": 0,
+      "pods": ["worker-api-7d9f8b-xk2q"]
+    }
+  },
+  "nodes": {
+    "worker-3": {
+      "name": "worker-3",
+      "status": "Ready",
+      "roles": "worker",
+      "age": "10d",
+      "version": "v1.28.0",
+      "temperature": null,
+      "hardware_faults": 0,
+      "online": true
+    }
+  },
+  "free_mem_mb": 128
+}

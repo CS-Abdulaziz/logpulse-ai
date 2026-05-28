@@ -1,0 +1,26 @@
+{
+  "scenario": "ssh_bruteforce",
+  "description": "SSH brute force attack from a single source IP escalating to account lockout",
+  "logs": [
+    {
+      "delay": 0,
+      "level": "INFO",
+      "message": "sshd: Accepted password for deploy from 192.168.1.10 port 52341 ssh2"
+    },
+    {
+      "delay": 2,
+      "level": "WARN",
+      "message": "sshd: Unusual access pattern detected from 10.0.0.55 — high connection rate"
+    },
+    {
+      "delay": 2,
+      "level": "ERROR",
+      "message": "sshd: Failed password for invalid user admin from 10.0.0.55 port 49821 ssh2"
+    },
+    {
+      "delay": 3,
+      "level": "FATAL",
+      "message": "sshd: Too many authentication failures for root from 10.0.0.55 port 49900 ssh2 — account locked"
+    }
+  ]
+}

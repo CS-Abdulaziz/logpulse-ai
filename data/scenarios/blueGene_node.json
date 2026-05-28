@@ -1,0 +1,26 @@
+{
+  "scenario": "blueGene_node",
+  "description": "BlueGene RAS node hardware fault escalating to node taken offline",
+  "logs": [
+    {
+      "delay": 0,
+      "level": "INFO",
+      "message": "RAS: node R00-M0-N04 initialized, health check passed, 16 cores online"
+    },
+    {
+      "delay": 2,
+      "level": "WARN",
+      "message": "RAS: node R00-M0-N04 temperature rising: 78C, threshold 85C — cooling check advised"
+    },
+    {
+      "delay": 2,
+      "level": "ERROR",
+      "message": "RAS: node R00-M0-N04 hardware fault detected — ECC memory errors increasing: 47 in last 60s"
+    },
+    {
+      "delay": 3,
+      "level": "FATAL",
+      "message": "RAS: node R00-M0-N04 taken offline — fatal hardware fault confirmed, 16 jobs killed and rescheduled"
+    }
+  ]
+}
