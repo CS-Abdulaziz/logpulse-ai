@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sim_models import (
+from ai_core.simulation.sim_models import (
     ClusterState,
     DeploymentStatus,
     PodStatus,
@@ -58,6 +58,27 @@ class StateManager:
                 pod.memory_limit = limit
 
         return f"deployment.apps/{deployment_name} resource requirements updated"
+
+    def scale_deployment(self, deployment_name: str, replicas: int) -> str:
+        """Simulate `kubectl scale deployment/<name> --replicas=N`."""
+        dep = self._state.deployments.get(deployment_name)
+        if dep is None:
+            return f"Error from server (NotFound): deployments.apps \"{deployment_name}\" not found"
+        dep.replicas = replicas
+        dep.ready    = min(dep.ready, replicas)
+        return f"deployment.apps/{deployment_name} scaled"
+
+    def exec_pod(self, pod_name: str, exec_cmd: str = "") -> str:
+        """Simulate `kubectl exec <pod> -- <cmd>` (read-only, no side effects)."""
+        pod = self._state.pods.get(pod_name)
+        if pod is None:
+            return f'Error from server (NotFound): pods "{pod_name}" not found'
+        if pod.status != PodStatus.RUNNING:
+            return (
+                f"error: unable to upgrade connection: container not running "
+                f"({pod.status.value})"
+            )
+        return f"[simulation] exec in {pod_name}: {exec_cmd or 'sh'}"
 
     def delete_pod(self, pod_name: str, namespace: str = "production") -> str:
         """Simulate `kubectl delete pod <name>`."""

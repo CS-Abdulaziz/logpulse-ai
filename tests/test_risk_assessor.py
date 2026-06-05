@@ -27,23 +27,8 @@ from __future__ import annotations
 import os
 import sys
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT     = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS   = os.path.join(_WORKFLOW, "agents")
-_CACHE    = os.path.join(_ROOT, "ai_core", "cache")
-
-for _p in (_WORKFLOW, _AGENTS, _CACHE):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-from risk_assessor import assess_commands, risk_assessor_node  # noqa: E402
-from state import LogState, RiskLevel, SolutionResult          # noqa: E402
+from ai_core.workflow.agents.risk_assessor import assess_commands, risk_assessor_node
+from ai_core.workflow.state import LogState, RiskLevel, SolutionResult
 
 
 # ===========================================================================
@@ -199,7 +184,7 @@ def test_risk_assessor_node_returns_security_check():
     risk_assessor_node must return a dict with key 'security_check'
     whose value is a RiskAssessment.  Verify with a known-FATAL command.
     """
-    from state import RiskAssessment
+    from ai_core.workflow.state import RiskAssessment
 
     state = LogState(
         raw_log="[2026-05-28] FATAL: connection pool exhausted on db-primary",

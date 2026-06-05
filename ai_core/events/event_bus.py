@@ -18,7 +18,7 @@ from __future__ import annotations
 import threading
 from typing import List
 
-from models import WorkflowEvent  # noqa: E402 — resolved via sys.path in tests
+from ai_core.events.models import WorkflowEvent
 
 # ---------------------------------------------------------------------------
 # Module-level singleton state — private

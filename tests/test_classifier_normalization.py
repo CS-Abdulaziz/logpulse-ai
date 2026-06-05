@@ -62,28 +62,14 @@ import os
 import sys
 from unittest import mock
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT      = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW  = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS    = os.path.join(_WORKFLOW, "agents")
-
-for _p in (_WORKFLOW, _AGENTS):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-import classifier_agent                                              # noqa: E402
-from classifier_agent import (                                       # noqa: E402
+from ai_core.workflow.agents import classifier_agent
+from ai_core.workflow.agents.classifier_agent import (
     normalize_category,
     CATEGORY_MAP,
     _CANONICAL_CATEGORIES,
     classifier_node,
 )
-from state import LogState, SeverityLevel                            # noqa: E402
+from ai_core.workflow.state import LogState, SeverityLevel
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +223,7 @@ def test_classifier_node_emits_canonical_category():
     }
     mock_response.raise_for_status.return_value = None
 
-    with mock.patch("classifier_agent.requests.post", return_value=mock_response):
+    with mock.patch("ai_core.workflow.agents.classifier_agent.requests.post", return_value=mock_response):
         state = LogState(
             raw_log="[2026-05-26 14:32:01] FATAL: remaining connection slots reserved"
         )
@@ -266,7 +252,7 @@ def test_classifier_node_canonical_input_unchanged():
     }
     mock_response.raise_for_status.return_value = None
 
-    with mock.patch("classifier_agent.requests.post", return_value=mock_response):
+    with mock.patch("ai_core.workflow.agents.classifier_agent.requests.post", return_value=mock_response):
         state = LogState(
             raw_log="[2026-05-26 14:32:01] ERROR: connection pool exhausted"
         )

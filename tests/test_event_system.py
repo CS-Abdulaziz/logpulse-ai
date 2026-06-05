@@ -26,23 +26,14 @@ import sys
 import threading
 import time
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT       = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_EVENTS_DIR = os.path.join(_ROOT, "ai_core", "events")
-
-if _EVENTS_DIR not in sys.path:
-    sys.path.insert(0, _EVENTS_DIR)
-
-from event_bus import (  # noqa: E402
+from ai_core.events.event_bus import (
     emit_event,
     get_all_events,
     get_events_for_incident,
     reset_events,
 )
-from models import EventType, WorkflowEvent   # noqa: E402
-from recorder import build_incident_timeline, record  # noqa: E402
+from ai_core.events.models import EventType, WorkflowEvent
+from ai_core.events.recorder import build_incident_timeline, record
 
 import pytest
 

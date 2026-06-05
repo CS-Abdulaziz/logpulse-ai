@@ -11,15 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — make recorder importable from any working directory
-# ---------------------------------------------------------------------------
 _HERE = Path(__file__).parent
-_EVENTS_DIR = str(_HERE.parent / "events")
-if _EVENTS_DIR not in sys.path:
-    sys.path.insert(0, _EVENTS_DIR)
-
-from recorder import build_incident_timeline  # noqa: E402
+from ai_core.events.recorder import build_incident_timeline
 
 _PROJECT_ROOT = _HERE.parent.parent
 _REPORTS_DIR = _PROJECT_ROOT / "reports"

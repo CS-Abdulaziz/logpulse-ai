@@ -47,29 +47,19 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_AGENTS_DIR   = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_EVENTS_DIR   = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "events"))
-_CACHE_DIR    = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "cache"))
-
-for _p in (_WORKFLOW_DIR, _EVENTS_DIR, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from state import (                          # noqa: E402
+from ai_core.workflow.state import (
     HumanReviewResult,
     LogState,
     OperatorDecision,
     RiskLevel,
     SandboxResult,
 )
-from recorder import record                  # noqa: E402
-from models import EventType                 # noqa: E402
-from sandbox_executor import execute_commands_in_sandbox  # noqa: E402
-from history_agent import get_history_manager             # noqa: E402
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
+from ai_core.workflow.agents.history_agent import get_history_manager
+from ai_core.simulation.cluster_state import ClusterState as ExecClusterState, seed_default_state
+from ai_core.simulation.execution_engine import ExecutionEngine
+from ai_core.simulation.intent_parser import parse_kubectl
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +135,7 @@ def _print_review_panel(state: LogState) -> None:
     print(f"  Flagged   : {flagged_count} commands require attention")
     print()
     print(_BORDER)
-    print("  [a] Approve & execute in Docker sandbox")
+    print("  [a] Approve & execute via Simulation Engine")
     print("  [r] Reject")
     print(_BORDER)
 
@@ -213,26 +203,61 @@ def human_in_the_loop_node(state: LogState) -> Dict[str, Any]:
         message="approved" if approved else "rejected",
     )
 
-    # ── Execute commands in sandbox (approval only) ───────────────────────────
+    # ── Execute commands via Simulation Engine (approval only) ───────────────
     sandbox_results: List[SandboxResult] = []
     if approved:
         sol = state.solution_result
         commands = sol.commands if sol else []
-        if commands and not auto_approve:
-            print("\n[Sandbox] Executing commands...\n")
-            sandbox_results = execute_commands_in_sandbox(
-                commands,
-                incident_id=state.trace_id,
-                cluster_state=state.cluster_state,
-            )
-        elif commands and auto_approve:
-            # Auto-approve: simulate execution without Docker
+        if commands:
+            print("\n[Simulation] Executing commands...\n")
+
+            # Use the ClusterState passed through the pipeline; fall back to
+            # a fresh default state if none was provided (e.g. --log mode).
+            exec_state = state.cluster_state
+            if not isinstance(exec_state, ExecClusterState):
+                exec_state = seed_default_state()
+
+            engine = ExecutionEngine(exec_state)
+
             for cmd in commands:
+                intent = parse_kubectl(cmd)
+                result = engine.execute(intent)
+
+                # ── Console output ────────────────────────────────────────
+                icon = "+" if result.success else "!"
+                print(f"  [{icon}] {cmd}")
+                if result.state_mutations:
+                    for mutation in result.state_mutations:
+                        print(f"        * {mutation}")
+                if result.stdout:
+                    for line in result.stdout.splitlines()[:6]:
+                        print(f"        {line}")
+                if not result.success and result.stderr:
+                    print(f"        ERR: {result.stderr}")
+                print()
+
+                # ── Event recording ───────────────────────────────────────
+                event_type = (
+                    EventType.SANDBOX_EXECUTED if result.success
+                    else EventType.SANDBOX_FAILED
+                )
+                record(
+                    incident_id=state.trace_id,
+                    event_type=event_type,
+                    node_name="human_in_the_loop_node",
+                    message=f"{cmd[:80]} (exit {result.exit_code})",
+                    metadata={
+                        "exit_code": result.exit_code,
+                        "mutations": result.state_mutations,
+                    },
+                )
+
+                # ── Convert to SandboxResult for pipeline state ───────────
                 sandbox_results.append(SandboxResult(
                     command=cmd,
-                    stdout=f"[auto-approve] simulated: {cmd}",
-                    stderr="",
-                    exit_code=0,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    exit_code=result.exit_code,
                     execution_time_ms=0,
                 ))
 

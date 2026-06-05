@@ -34,22 +34,15 @@ from pathlib import Path
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
 _ROOT           = Path(__file__).parent.parent
-_SIMULATION_DIR = str(_ROOT / "ai_core" / "simulation")
 
-if _SIMULATION_DIR not in sys.path:
-    sys.path.insert(0, _SIMULATION_DIR)
-
-from sim_models import (          # noqa: E402
+from ai_core.simulation.sim_models import (
     ClusterState,
     PodStatus,
     DeploymentStatus,
 )
-from state_manager import StateManager  # noqa: E402
-from command_router import route        # noqa: E402
+from ai_core.simulation.state_manager import StateManager
+from ai_core.simulation.command_router import route
 
 _SCENARIOS = _ROOT / "data" / "scenarios"
 
@@ -244,3 +237,156 @@ def test_route_unknown_command():
 
     assert result.exit_code == 127
     assert "not found" in result.stderr or "xyzzy" in result.stderr
+
+
+# ===========================================================================
+# Intent-based execution — new tests
+# ===========================================================================
+
+# 13 — kubectl logs with namespace and --tail flag → FETCH_LOGS, exit 0
+def test_route_kubectl_logs_with_flags():
+    state  = _load_state("oom_critical")
+    result = route("kubectl logs worker-api-7d9f8b-xk2q -n production --tail=100", state)
+
+    assert result.exit_code == 0
+    assert "OOMKilled" in result.stdout or "Memory" in result.stdout
+
+
+# 14 — kubectl top pod → METRICS, exit 0, shows CPU and memory columns
+def test_route_kubectl_top_pod():
+    state  = _load_state("oom_critical")
+    result = route("kubectl top pod", state)
+
+    assert result.exit_code == 0
+    assert "CPU(cores)" in result.stdout
+    assert "MEMORY(bytes)" in result.stdout
+    assert "worker-api-7d9f8b-xk2q" in result.stdout
+
+
+# 15 — kubectl top pod <name> → single-pod metrics
+def test_route_kubectl_top_pod_named():
+    state  = _load_state("oom_critical")
+    result = route("kubectl top pod worker-api-7d9f8b-xk2q", state)
+
+    assert result.exit_code == 0
+    assert "worker-api-7d9f8b-xk2q" in result.stdout
+
+
+# 16 — kubectl top node → METRICS for nodes, exit 0
+def test_route_kubectl_top_node():
+    state  = _load_state("oom_critical")
+    result = route("kubectl top node", state)
+
+    assert result.exit_code == 0
+    assert "CPU(cores)" in result.stdout
+
+
+# 17 — kubectl rollout status deployment/worker-api → ROLLOUT_STATUS, exit 0
+def test_route_kubectl_rollout_status():
+    state  = _load_state("oom_critical")
+    result = route("kubectl rollout status deployment/worker-api", state)
+
+    # Degraded deployment → waiting message, but still exit 0
+    assert result.exit_code == 0
+    assert "worker-api" in result.stdout
+
+
+# 18 — kubectl patch deployment worker-api (no slash) → PATCH_DEPLOYMENT, exit 0
+def test_route_kubectl_patch_deployment_no_slash():
+    state  = _load_state("oom_critical")
+    result = route('kubectl patch deployment worker-api -p \'{"spec":{"template":{"spec":{"containers":[{"name":"app","resources":{"limits":{"memory":"512Mi"}}}]}}}}\'', state)
+
+    assert result.exit_code == 0
+    assert "patched" in result.stdout
+
+
+# 19 — kubectl patch deployment/worker-api with memory in JSON → mutates state
+def test_route_kubectl_patch_deployment_memory():
+    state  = _load_state("oom_critical")
+    result = route(
+        'kubectl patch deployment/worker-api -p \'{"spec":{"template":{"spec":{"containers":[{"name":"app","resources":{"limits":{"memory":"512Mi"}}}]}}}}\'',
+        state,
+    )
+    assert result.exit_code == 0
+    pod = state.pods["worker-api-7d9f8b-xk2q"]
+    assert pod.memory_limit == "512Mi"
+
+
+# 20 — kubectl describe deployment worker-api → DESCRIBE_DEPLOYMENT, exit 0
+def test_route_kubectl_describe_deployment():
+    state  = _load_state("oom_critical")
+    result = route("kubectl describe deployment worker-api", state)
+
+    assert result.exit_code == 0
+    assert "worker-api" in result.stdout
+    assert "Replicas" in result.stdout
+
+
+# 21 — kubectl get events → GET_EVENTS, exit 0, shows OOMKilling warning
+def test_route_kubectl_get_events():
+    state  = _load_state("oom_critical")
+    result = route("kubectl get events", state)
+
+    assert result.exit_code == 0
+    assert "OOMKilling" in result.stdout or "LAST SEEN" in result.stdout
+
+
+# 22 — kubectl get svc → GET_SERVICE, exit 0
+def test_route_kubectl_get_services():
+    state  = _load_state("oom_critical")
+    result = route("kubectl get svc", state)
+
+    assert result.exit_code == 0
+    assert "ClusterIP" in result.stdout or "worker-api" in result.stdout
+
+
+# 23 — kubectl scale deployment/worker-api --replicas=3 → SCALE, mutates state
+def test_route_kubectl_scale_deployment():
+    state  = _load_state("oom_critical")
+    result = route("kubectl scale deployment/worker-api --replicas=3", state)
+
+    assert result.exit_code == 0
+    assert "scaled" in result.stdout
+    assert state.deployments["worker-api"].replicas == 3
+
+
+# 24 — unknown kubectl sub-command → safe fallback, exit 0 (never exit -1)
+def test_route_unknown_kubectl_never_exits_minus_one():
+    state  = _load_state("oom_critical")
+    result = route("kubectl wait --for=condition=ready pod/worker-api-7d9f8b-xk2q", state)
+
+    assert result.exit_code == 0, "Unknown kubectl subcommand must not return exit -1"
+
+
+# 25 — intent parser: namespace flag in the middle of the command
+def test_intent_parser_namespace_extraction():
+    from ai_core.simulation.intent_parser import parse_kubectl
+
+    intent = parse_kubectl("kubectl logs worker-api -n staging --tail=50")
+    assert intent.verb      == "logs"
+    assert intent.target    == "worker-api"
+    assert intent.namespace == "staging"
+    assert intent.flags.get("tail") == 50
+
+
+# 26 — intent parser: resource/name notation
+def test_intent_parser_resource_prefix_notation():
+    from ai_core.simulation.intent_parser import parse_kubectl
+
+    intent = parse_kubectl("kubectl rollout status deployment/worker-api")
+    assert intent.verb     == "rollout"
+    assert intent.resource == "status"
+    assert intent.target   == "worker-api"
+
+
+# 27 — intent parser: top pod vs top node discrimination
+def test_intent_parser_top_resource_type():
+    from ai_core.simulation.intent_parser import parse_kubectl
+
+    pod_intent  = parse_kubectl("kubectl top pod worker-api")
+    node_intent = parse_kubectl("kubectl top node")
+
+    assert pod_intent.verb     == "top"
+    assert pod_intent.resource == "pod"
+    assert node_intent.verb    == "top"
+    assert node_intent.resource == "node"

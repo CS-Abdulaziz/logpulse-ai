@@ -52,20 +52,9 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — resolve regardless of working directory
-# ---------------------------------------------------------------------------
-_AGENTS_DIR  = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_EVENTS_DIR  = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "events"))
-
-for _p in (_WORKFLOW_DIR, _EVENTS_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from state import LogState, RagResult   # noqa: E402
-from recorder import record             # noqa: E402
-from models import EventType            # noqa: E402
+from ai_core.workflow.state import LogState, RagResult
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
 
 # ---------------------------------------------------------------------------
 # Tuneable constants
@@ -88,6 +77,7 @@ DEBUG_RAG: bool = True
 # ChromaDB client — loaded ONCE at module import
 # ---------------------------------------------------------------------------
 
+_AGENTS_DIR = os.path.dirname(os.path.abspath(__file__))
 _CHROMA_PATH = os.path.normpath(
     os.path.join(_AGENTS_DIR, "..", "..", "..", "data", "chroma_playbooks")
 )

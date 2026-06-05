@@ -30,30 +30,19 @@ import requests
 
 from typing import Dict, Any
 
-import sys
-import os
-
-_AGENTS_DIR  = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_EVENTS_DIR  = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "events"))
-
-for _p in (_WORKFLOW_DIR, _EVENTS_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from state import (
+from ai_core.workflow.state import (
     LogState,
     ClassificationData,
     SeverityLevel
 )
-from recorder import record       # noqa: E402
-from models import EventType      # noqa: E402
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
 
 # ==========================================
 # API Configuration
 # ==========================================
 
-COLAB_API_URL = "https://graded-regalia-unused.ngrok-free.dev/generate"
+COLAB_API_URL = " https://graded-regalia-unused.ngrok-free.dev/generate"
 
 REQUEST_TIMEOUT = 45
 

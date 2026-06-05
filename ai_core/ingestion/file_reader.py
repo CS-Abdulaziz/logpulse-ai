@@ -13,14 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — make filters importable
-# ---------------------------------------------------------------------------
-_INGESTION_DIR = str(Path(__file__).parent)
-if _INGESTION_DIR not in sys.path:
-    sys.path.insert(0, _INGESTION_DIR)
-
-from filters import dedup_filter, keyword_filter  # noqa: E402
+from ai_core.ingestion.filters import dedup_filter, keyword_filter
 
 # ---------------------------------------------------------------------------
 # Timestamp extraction

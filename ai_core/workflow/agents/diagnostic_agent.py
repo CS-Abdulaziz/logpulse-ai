@@ -28,26 +28,15 @@ import json
 import os
 import re
 import sys
+import time
 import warnings
 from typing import Any, Dict, Optional
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — resolve imports regardless of working directory
-# (pytest from project root, or python main.py from ai_core/workflow/).
-# ---------------------------------------------------------------------------
-_AGENTS_DIR   = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_CACHE_DIR    = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "cache"))
-_EVENTS_DIR   = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "events"))
-_PROJECT_ROOT = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", ".."))
+from ai_core.workflow.state import DiagnosticResult, HistoryContext, LogState, RagResult
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
 
-for _p in (_WORKFLOW_DIR, _CACHE_DIR, _EVENTS_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from state import DiagnosticResult, HistoryContext, LogState, RagResult  # noqa: E402
-from recorder import record   # noqa: E402
-from models import EventType  # noqa: E402
+_PROJECT_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
 
 # ---------------------------------------------------------------------------
@@ -65,7 +54,7 @@ except ImportError:
 # Gemini SDK initialisation
 # ---------------------------------------------------------------------------
 
-MODEL_NAME = "gemini-3.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 _FALLBACK_MODEL = "gemini-1.5-flash"
 
 # Acceptance floor: a playbook must score ≥ this to serve as a fallback
@@ -196,56 +185,61 @@ Your output must contain absolutely ZERO text outside the JSON block.
     return prompt
 
 
+GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-3.5-flash",
+]
+
+
 def _call_gemini(prompt: str) -> Dict[str, Any]:
     """
-    Send *prompt* to the configured Gemini model and parse the JSON response.
-
-    Raises on any failure so the caller's try/except routes to the next tier.
+    Try each model in GEMINI_MODELS order with up to 2 attempts per model.
+    Waits 3 s before retrying a 503/429 on the same model, then advances
+    to the next model.  Returns parsed JSON on first success.
+    Raises the last exception if all models and retries fail.
     """
     if not GEMINI_AVAILABLE or _genai_client is None:
         raise RuntimeError("Gemini client not initialised.")
 
-    response = _genai_client.models.generate_content(
-        model=_active_model,
-        contents=prompt,
-        config=_generate_config,
-    )
-    text: str = response.text.strip()
+    last_error: Optional[Exception] = None
 
-    # ------------------------------------------------------------------
-    # Robust Markdown fence removal.
-    #
-    # Gemini Flash sometimes wraps its JSON in code fences despite the
-    # explicit "no markdown" instruction in the prompt.  Handle every
-    # known variant defensively:
-    #
-    #   ```json          (opening fence, with/without language tag, own line)
-    #   { ... }
-    #   ```              (closing fence, own line)
-    #
-    # Also handle the inline variant:  ```json{ ... }```  (no newline).
-    #
-    # MULTILINE flag lets ^ / $ match at the start/end of each line so
-    # the fence substitution fires even when the fence is not at the very
-    # start of the whole string.
-    # ------------------------------------------------------------------
+    for model_name in GEMINI_MODELS:
+        for attempt in range(2):
+            try:
+                response = _genai_client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=_generate_config,
+                )
+                text: str = response.text.strip()
 
-    # Step 1: remove an opening fence line (```json or ```, alone on its line)
-    text = re.sub(r"^```(?:json)?\s*$", "", text, flags=re.IGNORECASE | re.MULTILINE)
-    # Step 2: remove a closing fence line (``` alone on its line)
-    text = re.sub(r"^```\s*$", "", text, flags=re.MULTILINE)
-    # Step 3: handle inline variant — fences not separated by a newline
-    text = re.sub(r"^```(?:json)?", "", text.strip(), flags=re.IGNORECASE)
-    text = re.sub(r"```$", "", text.strip())
-    text = text.strip()
+                # Robust Markdown fence removal.
+                text = re.sub(r"^```(?:json)?\s*$", "", text, flags=re.IGNORECASE | re.MULTILINE)
+                text = re.sub(r"^```\s*$", "", text, flags=re.MULTILINE)
+                text = re.sub(r"^```(?:json)?", "", text.strip(), flags=re.IGNORECASE)
+                text = re.sub(r"```$", "", text.strip())
+                text = text.strip()
 
-    # Step 4: extract the first {...} block — guards against any residual text.
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise ValueError(f"No JSON object found in Gemini response: {text!r}")
+                match = re.search(r"\{.*\}", text, re.DOTALL)
+                if not match:
+                    raise ValueError(f"No JSON object found in Gemini response: {text!r}")
 
-    parsed: Dict[str, Any] = json.loads(match.group(0))
-    return parsed
+                return json.loads(match.group(0))
+
+            except Exception as e:
+                last_error = e
+                is_503 = "503" in str(e) or "UNAVAILABLE" in str(e)
+                is_429 = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
+
+                if (is_503 or is_429) and attempt == 0:
+                    time.sleep(3)
+                    continue
+                elif is_503 or is_429:
+                    break
+                else:
+                    break  # unknown error → try next model
+
+    raise last_error
 
 
 def _playbook_fallback(state: LogState) -> DiagnosticResult:

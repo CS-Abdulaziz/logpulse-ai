@@ -38,21 +38,10 @@ from unittest.mock import patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT          = Path(__file__).parent.parent
-_INGESTION_DIR = str(_ROOT / "ai_core" / "ingestion")
-_CACHE_DIR     = str(_ROOT / "ai_core" / "cache")
-
-for _p in (_INGESTION_DIR, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from filters import TRIGGER_KEYWORDS, dedup_filter, keyword_filter  # noqa: E402
-from log_queue import LogQueue                                        # noqa: E402
-from file_reader import parse_timestamp, read_file_logs               # noqa: E402
-from stream_reader import read_stream_mock                            # noqa: E402
+from ai_core.ingestion.filters import TRIGGER_KEYWORDS, dedup_filter, keyword_filter
+from ai_core.ingestion.log_queue import LogQueue
+from ai_core.ingestion.file_reader import parse_timestamp, read_file_logs
+from ai_core.ingestion.stream_reader import read_stream_mock
 
 
 # ===========================================================================

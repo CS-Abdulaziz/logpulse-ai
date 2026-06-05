@@ -1,22 +1,37 @@
 """
-ai_core/simulation/command_router.py — Routes parsed commands to StateManager/renderers.
+ai_core/simulation/command_router.py — Intent-based command router.
 
-Supported command families:
-  kubectl get pods / deployments / nodes
-  kubectl describe pod <name>
-  kubectl logs <name>
-  kubectl rollout restart deployment/<name>
-  kubectl set resources deployment/<name> --limits=memory=<X>
-  kubectl delete pod <name>
-  iptables -A INPUT -s <ip> -j DROP
-  faillock --user <account> --reset
-  systemctl status <service>
-  free -h / free -m
-  ps aux
-  hdfs fsck /
-  hdfs dfs -ls /
-  echo / true / false                          → pass-through stubs
-  Unknown                                      → exit_code 127
+All kubectl commands are first parsed into a KubectlIntent (see
+intent_parser.py) and dispatched by intent type.  This eliminates rigid
+string-matching and ensures that no valid Kubernetes command ever returns
+exit -1 or exit 127.
+
+Supported intent families (kubectl)
+-------------------------------------
+  FETCH_LOGS         → render pod logs with tail/previous options
+  METRICS            → render CPU/memory table (pod or node)
+  ROLLOUT_STATUS     → report deployment health
+  ROLLOUT_RESTART    → restart deployment pods, mutate state
+  PATCH_DEPLOYMENT   → apply memory-limit patch, mutate state
+  GET_POD            → render pod list or single-pod detail
+  GET_DEPLOYMENT     → render deployment list
+  GET_NODES          → render node table
+  GET_ALL            → render pods + deployments
+  GET_EVENTS         → render warning/normal event table
+  GET_SERVICE        → render service table
+  DESCRIBE_POD       → full pod detail
+  DESCRIBE_DEPLOYMENT → full deployment detail
+  SET_RESOURCES      → set memory limit, mutate state
+  DELETE_POD         → delete pod, mutate state
+  APPLY_MANIFEST     → acknowledged (no manifest state)
+  SCALE              → scale replicas, mutate state
+  EXEC               → simulate exec in pod
+  UNKNOWN            → safe fallback, exit 0 with explanation
+
+Non-kubectl families
+---------------------
+  iptables, faillock, systemctl, free, ps, hdfs, last/who/w,
+  cat/tail/grep auth.log, echo/true/false/comments
 """
 from __future__ import annotations
 
@@ -25,9 +40,10 @@ import shlex
 from dataclasses import dataclass, field
 from typing import Optional
 
-from sim_models import ClusterState
-from state_manager import StateManager
-import renderers
+from ai_core.simulation.sim_models import ClusterState
+from ai_core.simulation.state_manager import StateManager
+from ai_core.simulation import renderers
+from ai_core.simulation.intent_parser import parse_kubectl
 
 
 @dataclass
@@ -111,94 +127,160 @@ def route(command: str, state: ClusterState) -> CommandResult:
 
 
 # ---------------------------------------------------------------------------
-# kubectl sub-router
+# kubectl sub-router — intent-based dispatch
 # ---------------------------------------------------------------------------
 
 def _route_kubectl(cmd: str, state: ClusterState, mgr: StateManager) -> CommandResult:
-    # kubectl get pods [-n <ns>]
-    m = re.match(r"kubectl get pods?(?:\s+-n\s+(\S+))?", cmd)
-    if m:
-        ns = m.group(1) or "production"
-        return CommandResult(stdout=renderers.render_pods(state, ns))
+    """
+    Parse *cmd* into a KubectlIntent and dispatch on (verb, resource).
 
-    # kubectl get deployments [-n <ns>]
-    m = re.match(r"kubectl get deployments?(?:\s+-n\s+(\S+))?", cmd)
-    if m:
-        ns = m.group(1) or "production"
-        return CommandResult(stdout=renderers.render_deployments(state, ns))
+    No valid Kubernetes command returns exit -1 or exit 127.
+    Unrecognised sub-commands return a safe explanation at exit 0.
+    """
+    intent = parse_kubectl(cmd)
+    verb   = intent.verb
+    res    = intent.resource
+    target = intent.target or ""
+    ns     = intent.namespace
+    flags  = intent.flags
 
-    # kubectl get nodes
-    if re.match(r"kubectl get nodes?", cmd):
-        return CommandResult(stdout=renderers.render_nodes(state))
+    # ── logs ──────────────────────────────────────────────────────────────
+    if verb == "logs":
+        return CommandResult(stdout=renderers.render_pod_logs(state, target))
 
-    # kubectl describe pod <name>
-    m = re.match(r"kubectl describe pod\s+(\S+)", cmd)
-    if m:
-        return CommandResult(stdout=renderers.render_pod_details(state, m.group(1)))
+    # ── top ───────────────────────────────────────────────────────────────
+    if verb == "top":
+        if res == "node":
+            return CommandResult(stdout=renderers.render_top_nodes(state, target))
+        return CommandResult(stdout=renderers.render_top_pods(state, ns, target))
 
-    # kubectl logs <name> [flags]
-    m = re.match(r"kubectl logs\s+(\S+)", cmd)
-    if m:
-        return CommandResult(stdout=renderers.render_pod_logs(state, m.group(1)))
-
-    # kubectl rollout restart deployment/<name>
-    m = re.match(r"kubectl rollout restart deployment/(\S+)", cmd)
-    if m:
-        msg = mgr.restart_deployment(m.group(1))
-        exit_code = 0 if "restarted" in msg else 1
-        return CommandResult(stdout=msg if exit_code == 0 else "",
-                             stderr="" if exit_code == 0 else msg,
-                             exit_code=exit_code)
-
-    # kubectl set resources deployment/<name> --limits=memory=<X>
-    m = re.match(
-        r"kubectl set resources deployment/(\S+).*--limits[= ]memory=(\S+)", cmd
-    )
-    if m:
-        dep, limit = m.group(1), m.group(2)
-        msg = mgr.set_memory_limit(dep, limit)
-        exit_code = 0 if "updated" in msg else 1
-        return CommandResult(stdout=msg if exit_code == 0 else "",
-                             stderr="" if exit_code == 0 else msg,
-                             exit_code=exit_code)
-
-    # kubectl delete pod <name>
-    m = re.match(r"kubectl delete pod\s+(\S+)(?:\s+-n\s+(\S+))?", cmd)
-    if m:
-        pod_name, ns = m.group(1), m.group(2) or "production"
-        msg = mgr.delete_pod(pod_name, ns)
-        exit_code = 0 if "deleted" in msg else 1
-        return CommandResult(stdout=msg if exit_code == 0 else "",
-                             stderr="" if exit_code == 0 else msg,
-                             exit_code=exit_code)
-
-    # kubectl rollout status deployment/<name>
-    m = re.match(r"kubectl rollout status deployment/(\S+)", cmd)
-    if m:
-        dep_name = m.group(1)
-        dep = state.deployments.get(dep_name)
-        if dep:
+    # ── rollout ───────────────────────────────────────────────────────────
+    if verb == "rollout":
+        if res == "status":
+            dep = state.deployments.get(target)
+            if dep:
+                ok_msg = (
+                    f'deployment "{target}" successfully rolled out'
+                    if dep.ready >= dep.replicas
+                    else f'Waiting for deployment "{target}" rollout to finish: '
+                         f'{dep.ready} of {dep.replicas} updated replicas are available...'
+                )
+                return CommandResult(stdout=ok_msg)
             return CommandResult(
-                stdout=f'deployment "{dep_name}" successfully rolled out'
+                stderr=f'Error from server (NotFound): deployments.apps "{target}" not found',
+                exit_code=1,
             )
+        if res == "restart":
+            msg = mgr.restart_deployment(target)
+            ok  = "restarted" in msg
+            return CommandResult(
+                stdout=msg if ok else "", stderr="" if ok else msg,
+                exit_code=0 if ok else 1,
+            )
+
+    # ── patch ─────────────────────────────────────────────────────────────
+    if verb == "patch":
+        dep = state.deployments.get(target)
+        if dep is None:
+            return CommandResult(
+                stderr=f'Error from server (NotFound): deployments.apps "{target}" not found',
+                exit_code=1,
+            )
+        mem_m = re.search(r'"memory"\s*:\s*"([^"]+)"', intent.original_command)
+        if mem_m:
+            msg = mgr.set_memory_limit(target, mem_m.group(1))
+            ok  = "updated" in msg
+            return CommandResult(
+                stdout=f'deployment.apps/{target} patched' if ok else "",
+                stderr="" if ok else msg,
+                exit_code=0 if ok else 1,
+            )
+        return CommandResult(stdout=f'deployment.apps/{target} patched')
+
+    # ── get ───────────────────────────────────────────────────────────────
+    if verb == "get":
+        if res == "pod":
+            if target:
+                pod = state.pods.get(target)
+                if pod:
+                    return CommandResult(stdout=renderers.render_pod_details(state, target))
+                return CommandResult(
+                    stderr=f'Error from server (NotFound): pods "{target}" not found',
+                    exit_code=1,
+                )
+            return CommandResult(stdout=renderers.render_pods(state, ns))
+        if res == "deployment":
+            return CommandResult(stdout=renderers.render_deployments(state, ns))
+        if res == "node":
+            return CommandResult(stdout=renderers.render_nodes(state))
+        if res == "all":
+            return CommandResult(stdout=f"{renderers.render_pods(state, ns)}\n\n{renderers.render_deployments(state, ns)}")
+        if res == "events":
+            return CommandResult(stdout=renderers.render_events(state, ns))
+        if res == "service":
+            return CommandResult(stdout=renderers.render_services(state, ns))
+
+    # ── describe ──────────────────────────────────────────────────────────
+    if verb == "describe":
+        if res == "pod":
+            return CommandResult(stdout=renderers.render_pod_details(state, target))
+        if res == "deployment":
+            return CommandResult(stdout=renderers.render_deployment_details(state, target))
+
+    # ── set resources ─────────────────────────────────────────────────────
+    if verb == "set" and res == "resources":
+        limits_str = str(flags.get("limits", ""))
+        mem_m = re.search(r"memory=(\S+)", limits_str) or re.search(r"memory=(\S+)", intent.original_command)
+        if mem_m:
+            msg = mgr.set_memory_limit(target, mem_m.group(1))
+            ok  = "updated" in msg
+            return CommandResult(
+                stdout=msg if ok else "", stderr="" if ok else msg,
+                exit_code=0 if ok else 1,
+            )
+        return CommandResult(stderr="error: --limits flag required for set resources", exit_code=1)
+
+    # ── delete pod ────────────────────────────────────────────────────────
+    if verb == "delete" and res == "pod":
+        msg = mgr.delete_pod(target, ns)
+        ok  = "deleted" in msg
         return CommandResult(
-            stderr=f'Error from server (NotFound): deployments.apps "{dep_name}" not found',
-            exit_code=1,
+            stdout=msg if ok else "", stderr="" if ok else msg,
+            exit_code=0 if ok else 1,
         )
 
-    # kubectl get all [-n <ns>]
-    m = re.match(r"kubectl get all(?:\s+-n\s+(\S+))?", cmd)
-    if m:
-        ns = m.group(1) or "production"
-        pods = renderers.render_pods(state, ns)
-        deps = renderers.render_deployments(state, ns)
-        return CommandResult(stdout=f"{pods}\n\n{deps}")
+    # ── apply ─────────────────────────────────────────────────────────────
+    if verb == "apply":
+        file_hint = str(flags.get("filename", flags.get("f", "<manifest>")))
+        return CommandResult(stdout=f"[simulation] applied {file_hint} (no manifest state in simulator)")
 
-    # Unrecognised kubectl sub-command
-    parts = cmd.split()
+    # ── scale ─────────────────────────────────────────────────────────────
+    if verb == "scale":
+        replicas = flags.get("replicas")
+        if replicas is None:
+            return CommandResult(stderr="error: --replicas flag required", exit_code=1)
+        msg = mgr.scale_deployment(target, int(replicas))
+        ok  = "scaled" in msg
+        return CommandResult(
+            stdout=msg if ok else "", stderr="" if ok else msg,
+            exit_code=0 if ok else 1,
+        )
+
+    # ── exec ──────────────────────────────────────────────────────────────
+    if verb == "exec":
+        exec_m = re.search(r"--\s+(.+)$", cmd)
+        result = mgr.exec_pod(target, exec_m.group(1).strip() if exec_m else "")
+        ok     = not result.startswith("error:") and "not found" not in result
+        return CommandResult(
+            stdout=result if ok else "", stderr="" if ok else result,
+            exit_code=0 if ok else 1,
+        )
+
+    # ── safe fallback — never exit -1 ────────────────────────────────────
+    subcmd = cmd.split()[1] if len(cmd.split()) > 1 else "?"
     return CommandResult(
-        stderr=f"error: unknown command \"{' '.join(parts[1:3])}\" for \"kubectl\"",
-        exit_code=1,
+        stdout=f"[simulation] kubectl {subcmd}: recognised but not simulated. No state mutated.",
+        exit_code=0,
     )
 
 

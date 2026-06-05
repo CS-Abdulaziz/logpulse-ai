@@ -27,7 +27,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-from hashing import compute_log_hash
+from ai_core.cache.hashing import compute_log_hash
 
 
 # ---------------------------------------------------------------------------

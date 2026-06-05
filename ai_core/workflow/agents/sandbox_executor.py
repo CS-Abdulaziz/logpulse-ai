@@ -35,22 +35,10 @@ import sys
 import time
 from typing import List
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_AGENTS_DIR      = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR    = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_EVENTS_DIR      = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "events"))
-_SIMULATION_DIR  = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "simulation"))
-
-for _p in (_WORKFLOW_DIR, _EVENTS_DIR, _SIMULATION_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from state import SandboxResult          # noqa: E402
-from recorder import record              # noqa: E402
-from models import EventType             # noqa: E402
-from command_router import route as _sim_route  # noqa: E402
+from ai_core.workflow.state import SandboxResult
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
+from ai_core.simulation.command_router import route as _sim_route
 
 
 # ---------------------------------------------------------------------------

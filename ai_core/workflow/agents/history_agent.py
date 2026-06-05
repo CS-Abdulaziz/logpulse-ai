@@ -33,21 +33,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — allow imports from ai_core/cache/ and ai_core/workflow/
-# regardless of the working directory (pytest from project root, or
-# python main.py from ai_core/workflow/).
-# ---------------------------------------------------------------------------
-_AGENTS_DIR  = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.normpath(os.path.join(_AGENTS_DIR, ".."))
-_CACHE_DIR   = os.path.normpath(os.path.join(_AGENTS_DIR, "..", "..", "cache"))
-
-for _p in (_WORKFLOW_DIR, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from hashing import compute_log_hash          # noqa: E402  (from ai_core/cache/)
-from state import HistoryContext, LogState    # noqa: E402  (from ai_core/workflow/)
+from ai_core.cache.hashing import compute_log_hash
+from ai_core.workflow.state import HistoryContext, LogState
 
 
 # ---------------------------------------------------------------------------

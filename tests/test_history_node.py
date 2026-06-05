@@ -59,23 +59,8 @@ import warnings
 from datetime import datetime, timezone
 from unittest import mock
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — works from project root (pytest) and inside workflow/ dir
-# ---------------------------------------------------------------------------
-_ROOT        = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW    = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS      = os.path.join(_WORKFLOW, "agents")
-_CACHE_DIR   = os.path.join(_ROOT, "ai_core", "cache")
-
-for _p in (_WORKFLOW, _AGENTS, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-import history_agent                                              # noqa: E402
-from history_agent import (                                       # noqa: E402
+from ai_core.workflow.agents import history_agent
+from ai_core.workflow.agents.history_agent import (
     HistoryManager,
     HistoryBackend,
     InMemoryHistoryBackend,
@@ -84,7 +69,7 @@ from history_agent import (                                       # noqa: E402
     get_history_manager,
     history_node,
 )
-from state import HistoryContext, LogState                        # noqa: E402
+from ai_core.workflow.state import HistoryContext, LogState
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +219,7 @@ def test_first_seen_preserved_last_seen_advances():
     first_seen must keep the timestamp from the first record_incident call.
     last_seen must be updated (≥ first_seen) on the second call.
     """
-    from hashing import compute_log_hash
+    from ai_core.cache.hashing import compute_log_hash
 
     backend = InMemoryHistoryBackend()
     manager = HistoryManager(backend)

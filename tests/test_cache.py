@@ -26,29 +26,14 @@ import os
 import sys
 import tempfile
 
-# ---------------------------------------------------------------------------
-# Resolve paths so the test works from the project root (pytest) *and* from
-# inside ai_core/workflow/ (python -m pytest).
-# ---------------------------------------------------------------------------
-_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_CACHE_DIR = os.path.join(_ROOT, "ai_core", "cache")
-_WORKFLOW_DIR = os.path.join(_ROOT, "ai_core", "workflow")
-
-for _p in (_CACHE_DIR, _WORKFLOW_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-from hashing import compute_log_hash, normalize_log          # noqa: E402
-from cache_manager import (                                    # noqa: E402
+from ai_core.cache.hashing import compute_log_hash, normalize_log
+from ai_core.cache.cache_manager import (
     CacheManager,
     InMemoryCacheBackend,
     SqliteCacheBackend,
 )
-from cache_node import cache_write_node, configure_cache      # noqa: E402
-from state import ClassificationData, LogState, SeverityLevel # noqa: E402
+from ai_core.cache.cache_node import cache_write_node, configure_cache
+from ai_core.workflow.state import ClassificationData, LogState, SeverityLevel
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +196,7 @@ def test_fallback_not_cached():
     assert result == {}
 
     # Nothing must be written
-    from hashing import compute_log_hash as _hash
+    from ai_core.cache.hashing import compute_log_hash as _hash
     stored = backend.get(_hash(state.raw_log))
     assert stored is None, "Fallback source must never be written to cache"
 
@@ -243,7 +228,7 @@ def test_unknown_category_not_cached():
     assert result == {}
 
     # Nothing must be written
-    from hashing import compute_log_hash as _hash
+    from ai_core.cache.hashing import compute_log_hash as _hash
     stored = backend.get(_hash(state.raw_log))
     assert stored is None, "Unknown category must never be written to cache"
 

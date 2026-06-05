@@ -22,22 +22,8 @@ from unittest import mock
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT        = Path(__file__).parent.parent
-_REPORTS_MOD = str(_ROOT / "ai_core" / "reports")
-_EVENTS_DIR  = str(_ROOT / "ai_core" / "events")
-_WORKFLOW_DIR = str(_ROOT / "ai_core" / "workflow")
-
-for _p in (_REPORTS_MOD, _EVENTS_DIR, _WORKFLOW_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# Reset event bus before importing anything that might emit events
-from event_bus import reset_events  # noqa: E402
-
-from pdf_generator import _safe, generate_report  # noqa: E402
+from ai_core.events.event_bus import reset_events
+from ai_core.reports.pdf_generator import _safe, generate_report
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +59,7 @@ def _clean_events():
 @pytest.fixture()
 def tmp_reports_dir(tmp_path, monkeypatch):
     """Redirect _REPORTS_DIR inside pdf_generator to a temp directory."""
-    import pdf_generator as mod
+    from ai_core.reports import pdf_generator as mod
     original = mod._REPORTS_DIR
     mod._REPORTS_DIR = tmp_path / "reports"
     yield mod._REPORTS_DIR
@@ -168,7 +154,7 @@ def test_long_fields_are_truncated(tmp_reports_dir):
 
 def test_fpdf2_unavailable_returns_none_no_crash(tmp_reports_dir, basic_state):
     """If fpdf2 is not importable, generate_report() must return None silently."""
-    import pdf_generator as mod
+    from ai_core.reports import pdf_generator as mod
 
     with mock.patch.dict("sys.modules", {"fpdf": None}):
         # Re-import won't help; patch the import inside generate_report directly
@@ -193,7 +179,7 @@ def _fpdf_import_blocker(name, *args, **kwargs):
 
 def test_reports_dir_auto_created(tmp_path, basic_state):
     """generate_report() must create the reports/ directory if it doesn't exist."""
-    import pdf_generator as mod
+    from ai_core.reports import pdf_generator as mod
     original = mod._REPORTS_DIR
     new_dir = tmp_path / "nonexistent" / "reports"
     assert not new_dir.exists()

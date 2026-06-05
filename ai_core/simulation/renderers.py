@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sim_models import ClusterState, PodStatus
+from ai_core.simulation.sim_models import ClusterState, PodStatus
 
 
 def render_pods(state: ClusterState, namespace: Optional[str] = None) -> str:
@@ -120,6 +120,147 @@ def render_service_status(service_name: str, active: bool = True) -> str:
         f"    Process: ExecStart=/usr/sbin/{service_name} -D (pid 1234)",
         f"   Main PID: 1234 ({service_name})",
     ]
+    return "\n".join(lines)
+
+
+def render_top_pods(state: ClusterState, namespace: Optional[str] = None, target: str = "") -> str:
+    """Render `kubectl top pod [<name>]` style output."""
+    ns   = namespace or "production"
+    pods = [p for p in state.pods.values() if p.namespace == ns]
+    if target:
+        pods = [p for p in pods if p.name == target]
+    if not pods:
+        return f"No resources found in {ns} namespace."
+
+    lines = ["NAME                          CPU(cores)   MEMORY(bytes)"]
+    for pod in pods:
+        raw_usage = pod.memory_usage.upper()
+        if "MI" in raw_usage:
+            mem_bytes = f"{raw_usage}"
+        else:
+            mem_bytes = pod.memory_usage or "0Mi"
+        raw_limit  = pod.memory_limit.upper()
+        limit_val  = int(raw_limit.rstrip("MI")) if "MI" in raw_limit else 256
+        usage_val  = int(raw_usage.rstrip("MI")) if "MI" in raw_usage else 0
+        cpu_pct    = min(980, int(usage_val / max(limit_val, 1) * 1000))
+        cpu_str    = f"{cpu_pct}m"
+        lines.append(f"{pod.name:<30}{cpu_str:<13}{mem_bytes}")
+    return "\n".join(lines)
+
+
+def render_top_nodes(state: ClusterState, target: str = "") -> str:
+    """Render `kubectl top node [<name>]` style output."""
+    nodes = list(state.nodes.values())
+    if target:
+        nodes = [n for n in nodes if n.name == target]
+    if not nodes:
+        return "No nodes found."
+
+    lines = ["NAME            CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%"]
+    for node in nodes:
+        cpu    = "412m"
+        cpu_p  = "10%"
+        mem    = "1843Mi"
+        mem_p  = "47%"
+        lines.append(f"{node.name:<16}{cpu:<13}{cpu_p:<7}{mem:<16}{mem_p}")
+    return "\n".join(lines)
+
+
+def render_events(state: ClusterState, namespace: Optional[str] = None) -> str:
+    """Render `kubectl get events` style output."""
+    ns   = namespace or "production"
+    pods = [p for p in state.pods.values() if p.namespace == ns]
+    if not pods:
+        return f"No events found in {ns} namespace."
+
+    lines = [
+        "LAST SEEN   TYPE      REASON              OBJECT                        MESSAGE"
+    ]
+    for pod in pods:
+        if pod.status == PodStatus.OOMKILLED:
+            lines.append(
+                f"2m          Warning   OOMKilling          pod/{pod.name:<28}"
+                f"Memory limit reached — container killed"
+            )
+            lines.append(
+                f"2m          Warning   BackOff             pod/{pod.name:<28}"
+                f"Back-off restarting failed container"
+            )
+        elif pod.status == PodStatus.CRASHED:
+            lines.append(
+                f"1m          Warning   BackOff             pod/{pod.name:<28}"
+                f"Back-off restarting failed container"
+            )
+        elif pod.status == PodStatus.RUNNING:
+            lines.append(
+                f"5m          Normal    Started             pod/{pod.name:<28}"
+                f"Started container app"
+            )
+    return "\n".join(lines)
+
+
+def render_services(state: ClusterState, namespace: Optional[str] = None) -> str:
+    """Render `kubectl get services` style table (derived from deployment names)."""
+    ns   = namespace or "production"
+    deps = [d for d in state.deployments.values() if d.namespace == ns]
+    lines = [
+        "NAME             TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE"
+    ]
+    if not deps:
+        lines.append(f"No resources found in {ns} namespace.")
+        return "\n".join(lines)
+    for i, dep in enumerate(deps):
+        ip = f"10.96.{10 + i}.{20 + i}"
+        lines.append(
+            f"{dep.name:<17}ClusterIP   {ip:<16}<none>        8080/TCP   2d"
+        )
+    return "\n".join(lines)
+
+
+def render_deployment_details(state: ClusterState, dep_name: str) -> str:
+    """Render `kubectl describe deployment <name>` style output."""
+    dep = state.deployments.get(dep_name)
+    if dep is None:
+        return f'Error from server (NotFound): deployments.apps "{dep_name}" not found'
+
+    pod_names = ", ".join(dep.pods) or "<none>"
+    lines = [
+        f"Name:                   {dep.name}",
+        f"Namespace:              {dep.namespace}",
+        f"Selector:               app={dep.name}",
+        f"Replicas:               {dep.replicas} desired | {dep.ready} updated | "
+        f"{dep.ready} ready | {dep.replicas - dep.ready} unavailable",
+        f"StrategyType:           RollingUpdate",
+        f"Status:                 {dep.status.value}",
+        f"Pod Template:",
+        f"  Labels:  app={dep.name}",
+        f"  Containers:",
+        f"   app:",
+        f"    Image:   app:latest",
+        f"    Port:    8080/TCP",
+    ]
+    for pod_name in dep.pods:
+        pod = state.pods.get(pod_name)
+        if pod:
+            lines += [
+                f"    Limits:",
+                f"      memory: {pod.memory_limit}",
+                f"    Usage:",
+                f"      memory: {pod.memory_usage}",
+            ]
+            break
+    lines += [
+        f"Conditions:",
+        f"  Available  {'True' if dep.ready > 0 else 'False'}",
+        f"  Progressing True",
+        f"Events:",
+    ]
+    if dep.ready < dep.replicas:
+        lines.append(
+            f"  Warning  Unavailable  deployment/{dep.name} does not have minimum "
+            f"availability."
+        )
+    lines.append(f"  Pods: {pod_names}")
     return "\n".join(lines)
 
 

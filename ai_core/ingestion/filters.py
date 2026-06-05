@@ -11,14 +11,7 @@ import sys
 from pathlib import Path
 from typing import Set
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — make hashing.py importable (ai_core/cache/)
-# ---------------------------------------------------------------------------
-_CACHE_DIR = str(Path(__file__).parent.parent / "cache")
-if _CACHE_DIR not in sys.path:
-    sys.path.insert(0, _CACHE_DIR)
-
-from hashing import compute_log_hash  # noqa: E402
+from ai_core.cache.hashing import compute_log_hash
 
 # ---------------------------------------------------------------------------
 # Trigger keywords — any match sends the line into the analysis pipeline

@@ -46,24 +46,9 @@ import os
 import sys
 from unittest import mock
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT        = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW    = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS      = os.path.join(_WORKFLOW, "agents")
-_CACHE_DIR   = os.path.join(_ROOT, "ai_core", "cache")
-
-for _p in (_WORKFLOW, _AGENTS, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-import rag_agent                                            # noqa: E402
-from rag_agent import rag_node, CONFIDENCE_THRESHOLD       # noqa: E402
-from state import ClassificationData, LogState, SeverityLevel  # noqa: E402
+from ai_core.workflow.agents import rag_agent
+from ai_core.workflow.agents.rag_agent import rag_node, CONFIDENCE_THRESHOLD
+from ai_core.workflow.state import ClassificationData, LogState, SeverityLevel
 
 
 # ---------------------------------------------------------------------------

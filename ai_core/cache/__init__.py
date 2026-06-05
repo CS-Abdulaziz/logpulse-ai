@@ -7,8 +7,8 @@
 #   InMemoryCacheBackend      — default (dev / test)
 #   SqliteCacheBackend        — persistent (production)
 
-from cache_manager import CacheBackend, InMemoryCacheBackend, SqliteCacheBackend
-from cache_node import configure_cache
+from ai_core.cache.cache_manager import CacheBackend, InMemoryCacheBackend, SqliteCacheBackend
+from ai_core.cache.cache_node import configure_cache
 
 __all__ = [
     "CacheBackend",

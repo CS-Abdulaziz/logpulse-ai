@@ -36,29 +36,10 @@ import os
 import sys
 from unittest import mock
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — must happen before any project imports so both
-# `ai_core/cache/` and `ai_core/workflow/` are resolvable from the project
-# root (the natural pytest working directory).
-#
-# Safety note: cache_node.py uses InMemoryCacheBackend at module level,
-# so importing it never touches the filesystem / data/ directory.
-# ---------------------------------------------------------------------------
-_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_CACHE_DIR = os.path.join(_ROOT, "ai_core", "cache")
-_WORKFLOW_DIR = os.path.join(_ROOT, "ai_core", "workflow")
-
-for _p in (_CACHE_DIR, _WORKFLOW_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Project imports
-# ---------------------------------------------------------------------------
-from graph import logpulse_app                              # noqa: E402
-from cache_node import configure_cache, route_after_cache   # noqa: E402
-from cache_manager import InMemoryCacheBackend              # noqa: E402
-from state import ClassificationData, LogState, SeverityLevel  # noqa: E402
+from ai_core.workflow.graph import logpulse_app
+from ai_core.cache.cache_node import configure_cache, route_after_cache
+from ai_core.cache.cache_manager import InMemoryCacheBackend
+from ai_core.workflow.state import ClassificationData, LogState, SeverityLevel
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +98,8 @@ class TestCacheSkipsClassifier:
     def setup_method(self):
         """Reset to an empty in-memory cache before every test and mock Gemini to avoid network calls."""
         configure_cache(InMemoryCacheBackend())
-        self.diag_patcher = mock.patch("agents.diagnostic_agent.GEMINI_AVAILABLE", new=False)
-        self.sol_patcher = mock.patch("agents.solution_agent.GEMINI_AVAILABLE", new=False)
+        self.diag_patcher = mock.patch("ai_core.workflow.agents.diagnostic_agent.GEMINI_AVAILABLE", new=False)
+        self.sol_patcher = mock.patch("ai_core.workflow.agents.solution_agent.GEMINI_AVAILABLE", new=False)
         self.diag_patcher.start()
         self.sol_patcher.start()
         os.environ["LOGPULSE_AUTO_APPROVE"] = "true"

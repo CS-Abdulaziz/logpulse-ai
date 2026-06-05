@@ -12,22 +12,16 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — make filters importable
-# ---------------------------------------------------------------------------
-_INGESTION_DIR = str(Path(__file__).parent)
-if _INGESTION_DIR not in sys.path:
-    sys.path.insert(0, _INGESTION_DIR)
-
-from filters import dedup_filter, keyword_filter  # noqa: E402
+from ai_core.ingestion.filters import dedup_filter, keyword_filter
 
 
 def read_stream_mock(
     scenario_path: str,
     seen: set,
     on_log: Callable[[str], None],
+    on_event: Optional[Callable[[dict], None]] = None,
 ) -> Tuple[int, int]:
     """
     Emit log events from a scenario JSON file, simulating real-time delays.
@@ -62,6 +56,10 @@ def read_stream_mock(
         Shared dedup hash set.
     on_log : callable
         Receives each qualifying log line (e.g. ``lq.put``).
+    on_event : callable, optional
+        Receives every emitted scenario event after delay/timestamp formatting.
+        This is useful for web telemetry streams that need to display all log
+        traffic while still queueing only lines that pass the analysis filters.
 
     Returns
     -------
@@ -89,6 +87,15 @@ def read_stream_mock(
         line = f"{ts} {level} {message}"
 
         print(f"[{ts}] {level:<5} {message}")
+
+        if on_event is not None:
+            on_event({
+                "timestamp": ts,
+                "level": level,
+                "message": message,
+                "line": line,
+                "scenario": name,
+            })
 
         if not keyword_filter(line):
             continue

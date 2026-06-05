@@ -14,38 +14,51 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — must happen before any ai_core imports
-# ---------------------------------------------------------------------------
 _THIS_DIR = Path(os.path.abspath(__file__)).parent   # ai_core/workflow/
-_CACHE_DIR      = str(_THIS_DIR.parent / "cache")
-_AGENTS_DIR     = str(_THIS_DIR / "agents")
-_EVENTS_DIR     = str(_THIS_DIR.parent / "events")
-_INGESTION_DIR  = str(_THIS_DIR.parent / "ingestion")
-_SIMULATION_DIR = str(_THIS_DIR.parent / "simulation")
 
-for _p in (_CACHE_DIR, _AGENTS_DIR, _EVENTS_DIR, _INGESTION_DIR, _SIMULATION_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
-from graph import logpulse_app               # noqa: E402  (adds agents/ to path)
-from cache_node import get_cache_stats       # noqa: E402
-from agents.history_agent import get_history_manager  # noqa: E402
+from ai_core.workflow.graph import logpulse_app
+from ai_core.cache.cache_node import get_cache_stats
+from ai_core.workflow.agents.history_agent import get_history_manager
 
-from filters import keyword_filter, dedup_filter      # noqa: E402
-from log_queue import LogQueue                         # noqa: E402
-from file_reader import read_file_logs                 # noqa: E402
-from stream_reader import read_stream_mock             # noqa: E402
+from ai_core.ingestion.filters import keyword_filter, dedup_filter
+from ai_core.ingestion.log_queue import LogQueue
+from ai_core.ingestion.file_reader import read_file_logs
+from ai_core.ingestion.stream_reader import read_stream_mock
+
+from ai_core.simulation.cluster_state import (
+    ClusterState as ExecClusterState,
+    seed_default_state,
+    seed_oom_state,
+)
 
 _PROJECT_ROOT  = _THIS_DIR.parent.parent
 _SCENARIOS_DIR = _PROJECT_ROOT / "data" / "scenarios"
 
 # ---------------------------------------------------------------------------
+# Scenario → ClusterState factory mapping
+# Extend this dict as new scenario types are added.
+# ---------------------------------------------------------------------------
+_SCENARIO_CLUSTER_FACTORIES = {
+    "oom_critical": seed_oom_state,
+}
+
+# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
-_log_counter    = 0     # incremented per run_pipeline call
-_cluster_state  = None  # set to ClusterState for --stream mock runs
+_log_counter   = 0     # incremented per run_pipeline call
+_cluster_state: ExecClusterState | None = None  # shared state for --stream mock runs
 
 
 def run_pipeline(raw_log: str) -> None:
@@ -57,7 +70,16 @@ def run_pipeline(raw_log: str) -> None:
     print(f"Processing log {_log_counter}")
     print(f"{'=' * 38}")
 
-    initial_state = {"raw_log": raw_log, "cluster_state": _cluster_state}
+    # ── Execution cluster state ───────────────────────────────────────────────
+    # For --stream mock: _cluster_state is the shared ExecClusterState instance
+    # so mutations accumulate across stream events (realistic simulation).
+    # For --log / --file: create a fresh default state per run (isolated).
+    if isinstance(_cluster_state, ExecClusterState):
+        run_cluster_state: ExecClusterState = _cluster_state
+    else:
+        run_cluster_state = seed_default_state()
+
+    initial_state = {"raw_log": raw_log, "cluster_state": run_cluster_state}
 
     print(f"\n[Input] {raw_log[:120]}{'...' if len(raw_log) > 120 else ''}\n")
 
@@ -236,17 +258,12 @@ def main() -> None:
                 f"Available scenarios: {avail_str}"
             )
 
-        # Load optional cluster state for simulation mode
+        # Build the execution cluster state for this stream session.
+        # Mutations from each pipeline run accumulate in this shared instance.
         global _cluster_state
-        state_path = _SCENARIOS_DIR / f"{args.scenario}_state.json"
-        if state_path.exists():
-            import json as _json
-            from sim_models import ClusterState  # noqa: E402
-            with open(state_path, encoding="utf-8") as _f:
-                _cluster_state = ClusterState.model_validate(_json.load(_f))
-            print(f"[Simulation] Loaded cluster state: {state_path.name}")
-        else:
-            _cluster_state = None
+        factory = _SCENARIO_CLUSTER_FACTORIES.get(args.scenario, seed_default_state)
+        _cluster_state = factory()
+        print(f"[Simulation] Cluster state ready: {args.scenario} ({type(_cluster_state).__name__})")
 
         seen: set = set()
         lq = LogQueue()
@@ -257,7 +274,7 @@ def main() -> None:
         lq.set_received(total)
         lq.stop()
         lq.print_stats()
-        _cluster_state = None  # reset after session
+        _cluster_state = None  # reset shared state after the stream session ends
 
 
 if __name__ == "__main__":

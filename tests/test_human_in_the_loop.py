@@ -32,22 +32,9 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Path bootstrap
-# ---------------------------------------------------------------------------
-_ROOT       = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW   = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS     = os.path.join(_WORKFLOW, "agents")
-_EVENTS_DIR = os.path.join(_ROOT, "ai_core", "events")
-_CACHE_DIR  = os.path.join(_ROOT, "ai_core", "cache")
-
-for _p in (_WORKFLOW, _AGENTS, _EVENTS_DIR, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from event_bus import get_events_for_incident, reset_events  # noqa: E402
-from models import EventType                                   # noqa: E402
-from state import (                                            # noqa: E402
+from ai_core.events.event_bus import get_events_for_incident, reset_events
+from ai_core.events.models import EventType
+from ai_core.workflow.state import (
     ClassificationData,
     DiagnosticResult,
     HumanReviewResult,
@@ -59,8 +46,8 @@ from state import (                                            # noqa: E402
     SeverityLevel,
     SolutionResult,
 )
-from human_in_the_loop import human_in_the_loop_node   # noqa: E402
-from sandbox_executor import execute_in_sandbox         # noqa: E402
+from ai_core.workflow.agents.human_in_the_loop import human_in_the_loop_node
+from ai_core.workflow.agents.sandbox_executor import execute_in_sandbox
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +118,7 @@ def test_auto_approve_returns_approved():
     """
     state = _make_state()
     # Prevent actual history write from crashing if SQLite is not configured
-    with patch("human_in_the_loop._persist_incident"):
+    with patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"):
         result = human_in_the_loop_node(state)
 
     assert result["user_approved"] is True
@@ -140,20 +127,20 @@ def test_auto_approve_returns_approved():
 
 
 # ===========================================================================
-# 2. Reject → decision = REJECTED, sandbox not called
+# 2. Reject → decision = REJECTED, engine not called
 # ===========================================================================
 
 def test_reject_skips_sandbox(monkeypatch):
     """
     When the operator chooses 'r', user_approved must be False and
-    no sandbox execution must occur.
+    no execution engine must be invoked.
     """
     monkeypatch.setenv("LOGPULSE_AUTO_APPROVE", "false")
 
     with (
         patch("builtins.input", return_value="r"),
-        patch("human_in_the_loop.execute_commands_in_sandbox") as mock_exec,
-        patch("human_in_the_loop._persist_incident"),
+        patch("ai_core.workflow.agents.human_in_the_loop.ExecutionEngine") as mock_engine,
+        patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"),
     ):
         state = _make_state()
         result = human_in_the_loop_node(state)
@@ -162,7 +149,7 @@ def test_reject_skips_sandbox(monkeypatch):
     review: HumanReviewResult = result["human_review"]
     assert review.decision == OperatorDecision.REJECTED
     assert review.sandbox_results == []
-    mock_exec.assert_not_called()
+    mock_engine.assert_not_called()
 
 
 # ===========================================================================
@@ -178,7 +165,7 @@ def test_invalid_input_loops_until_valid(monkeypatch, capsys):
 
     with (
         patch("builtins.input", side_effect=lambda _="": next(inputs)),
-        patch("human_in_the_loop._persist_incident"),
+        patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"),
     ):
         state = _make_state()
         result = human_in_the_loop_node(state)
@@ -189,26 +176,33 @@ def test_invalid_input_loops_until_valid(monkeypatch, capsys):
 
 
 # ===========================================================================
-# 4. Sandbox unavailable → pipeline does not crash
+# 4. Approval with no cluster state → ExecutionEngine uses default state
 # ===========================================================================
 
-def test_sandbox_unavailable_does_not_crash():
+def test_approval_without_cluster_state_does_not_crash():
+    """
+    When no cluster_state is provided (e.g. --log mode), the HITL node must
+    fall back to seed_default_state() and execute commands via ExecutionEngine.
+    No exit_code -1 may be returned for known kubectl commands.
+    """
     os.environ["LOGPULSE_AUTO_APPROVE"] = "false"
     try:
         state = _make_state()
+        assert state.cluster_state is None  # no state seeded by _make_state
+
         with (
             patch("builtins.input", return_value="a"),
-            patch("subprocess.run", side_effect=FileNotFoundError("docker not found")),
-            patch("human_in_the_loop._persist_incident"),
+            patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"),
         ):
             result = human_in_the_loop_node(state)
-            assert result is not None
-            sandbox_results = result["human_review"].sandbox_results
-            assert all(r.exit_code == -1 for r in sandbox_results)
-            assert all(
-                "sandbox unavailable" in r.stdout
-                for r in sandbox_results
-            )
+
+        assert result is not None
+        sandbox_results = result["human_review"].sandbox_results
+        # ExecutionEngine never returns exit_code -1 for known kubectl intents
+        assert len(sandbox_results) > 0
+        assert all(r.exit_code != -1 for r in sandbox_results), (
+            f"Unexpected exit_code -1 in: {[r.exit_code for r in sandbox_results]}"
+        )
     finally:
         os.environ["LOGPULSE_AUTO_APPROVE"] = "true"  # restore
 
@@ -245,7 +239,7 @@ def test_record_incident_called_with_correct_outcome(monkeypatch):
     """
     mock_mgr = MagicMock()
     with (
-        patch("human_in_the_loop.get_history_manager", return_value=mock_mgr),
+        patch("ai_core.workflow.agents.human_in_the_loop.get_history_manager", return_value=mock_mgr),
     ):
         state = _make_state()
         human_in_the_loop_node(state)
@@ -264,7 +258,7 @@ def test_record_incident_rejected_outcome(monkeypatch):
 
     with (
         patch("builtins.input", return_value="r"),
-        patch("human_in_the_loop.get_history_manager", return_value=mock_mgr),
+        patch("ai_core.workflow.agents.human_in_the_loop.get_history_manager", return_value=mock_mgr),
     ):
         state = _make_state()
         human_in_the_loop_node(state)
@@ -284,7 +278,7 @@ def test_operator_approved_event_emitted():
     After approval, the event bus must contain an OPERATOR_APPROVED event
     for the correct incident_id.
     """
-    with patch("human_in_the_loop._persist_incident"):
+    with patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"):
         state = _make_state()
         human_in_the_loop_node(state)
 
@@ -305,7 +299,7 @@ def test_operator_rejected_event_emitted(monkeypatch):
 
     with (
         patch("builtins.input", return_value="r"),
-        patch("human_in_the_loop._persist_incident"),
+        patch("ai_core.workflow.agents.human_in_the_loop._persist_incident"),
     ):
         state = _make_state()
         human_in_the_loop_node(state)

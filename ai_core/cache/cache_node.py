@@ -21,43 +21,18 @@ to graph.py.
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import Any, Dict
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — allow this module to be imported both when:
-#   a) running from ai_core/workflow/  (python main.py)
-#   b) running from the project root   (pytest)
-# ---------------------------------------------------------------------------
-_CACHE_DIR = os.path.dirname(os.path.abspath(__file__))
-_WORKFLOW_DIR = os.path.join(_CACHE_DIR, "..", "workflow")
-
-for _p in (_CACHE_DIR, _WORKFLOW_DIR):
-    _p = os.path.normpath(_p)
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Internal imports (resolved via sys.path above)
-# ---------------------------------------------------------------------------
-from state import ClassificationData, LogState                  # noqa: E402
-from agents.classifier_agent import normalize_severity          # noqa: E402
-from cache_manager import (                                      # noqa: E402
+from ai_core.workflow.state import ClassificationData, LogState
+from ai_core.workflow.agents.classifier_agent import normalize_severity
+from ai_core.cache.cache_manager import (
     CacheBackend,
     CacheManager,
     CacheStats,
     InMemoryCacheBackend,
 )
-
-# ---------------------------------------------------------------------------
-# Events wiring
-# ---------------------------------------------------------------------------
-_EVENTS_DIR = os.path.normpath(os.path.join(_CACHE_DIR, "..", "events"))
-if _EVENTS_DIR not in sys.path:
-    sys.path.insert(0, _EVENTS_DIR)
-from recorder import record       # noqa: E402
-from models import EventType      # noqa: E402
+from ai_core.events.recorder import record
+from ai_core.events.models import EventType
 
 # ---------------------------------------------------------------------------
 # Module-level backend — default is InMemory (zero dependencies, works offline)

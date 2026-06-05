@@ -50,23 +50,8 @@ import os
 import sys
 from unittest import mock
 
-# ---------------------------------------------------------------------------
-# Path bootstrap — works from project root (pytest) and inside workflow/ dir
-# ---------------------------------------------------------------------------
-_ROOT      = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-_WORKFLOW  = os.path.join(_ROOT, "ai_core", "workflow")
-_AGENTS    = os.path.join(_WORKFLOW, "agents")
-_CACHE_DIR = os.path.join(_ROOT, "ai_core", "cache")
-
-for _p in (_WORKFLOW, _AGENTS, _CACHE_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-# ---------------------------------------------------------------------------
-# Imports under test
-# ---------------------------------------------------------------------------
-import diagnostic_agent                                          # noqa: E402
-from diagnostic_agent import (                                   # noqa: E402
+from ai_core.workflow.agents import diagnostic_agent
+from ai_core.workflow.agents.diagnostic_agent import (
     diagnostic_agent_node,
     PLAYBOOK_FALLBACK_THRESHOLD,
     _build_prompt,
@@ -74,7 +59,7 @@ from diagnostic_agent import (                                   # noqa: E402
     _safe_fallback,
     _call_gemini,
 )
-from state import (                                              # noqa: E402
+from ai_core.workflow.state import (
     ClassificationData,
     DiagnosticResult,
     HistoryContext,
@@ -153,7 +138,7 @@ def _make_state(
 def _mock_gemini_success(payload: dict = _GEMINI_JSON):
     """Patch _call_gemini to return *payload* without hitting the network."""
     return mock.patch(
-        "diagnostic_agent._call_gemini",
+        "ai_core.workflow.agents.diagnostic_agent._call_gemini",
         return_value=payload,
     )
 
@@ -161,7 +146,7 @@ def _mock_gemini_success(payload: dict = _GEMINI_JSON):
 def _mock_gemini_fail(exc=RuntimeError("Simulated Gemini API failure")):
     """Patch _call_gemini to raise *exc*."""
     return mock.patch(
-        "diagnostic_agent._call_gemini",
+        "ai_core.workflow.agents.diagnostic_agent._call_gemini",
         side_effect=exc,
     )
 
@@ -286,7 +271,7 @@ def test_malformed_gemini_json_routes_to_fallback():
     state = _make_state(rag=_STRONG_RAG, history=_FIRST_HISTORY)
 
     with _force_gemini_available(True), mock.patch(
-        "diagnostic_agent._call_gemini",
+        "ai_core.workflow.agents.diagnostic_agent._call_gemini",
         side_effect=ValueError("No JSON object found"),
     ):
         result = diagnostic_agent_node(state)
@@ -312,7 +297,7 @@ def test_node_never_raises_on_unexpected_exception():
     state = _make_state(rag=None, history=None)
 
     with _force_gemini_available(True), mock.patch(
-        "diagnostic_agent._call_gemini",
+        "ai_core.workflow.agents.diagnostic_agent._call_gemini",
         side_effect=Exception("Totally unexpected failure"),
     ):
         # Must not raise
@@ -405,7 +390,7 @@ def test_gemini_markdown_fence_variants():
 
         with (
             _force_gemini_available(True),
-            mock.patch("diagnostic_agent._genai_client", mock_client),
+            mock.patch("ai_core.workflow.agents.diagnostic_agent._genai_client", mock_client),
         ):
             parsed = _call_gemini("dummy prompt")
 
