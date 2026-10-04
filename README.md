@@ -109,7 +109,3 @@ pytest tests/
 **Backend:** Python, FastAPI, Server-Sent Events, SQLite, fpdf2
 **Frontend:** Next.js, TypeScript, Tailwind CSS
 **Testing:** pytest
-
-## Team
-
-Built by a team of three. Abdulaziz led the AI core: the LangGraph pipeline, model fine-tuning, RAG, caching and the agents.
