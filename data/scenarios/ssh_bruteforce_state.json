@@ -1,0 +1,14 @@
+{
+  "scenario": "ssh_bruteforce",
+  "pods": {},
+  "deployments": {},
+  "nodes": {},
+  "ssh": {
+    "failed_attempts": 847,
+    "attacker_ip": "10.0.0.55",
+    "locked_accounts": ["root"],
+    "blocked_ips": [],
+    "active_connections": 12
+  },
+  "free_mem_mb": 2048
+}

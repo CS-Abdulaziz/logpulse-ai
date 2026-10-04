@@ -1,0 +1,7 @@
+# LogPulse AI — API dependencies
+# Install with: pip install -r api/requirements.txt
+# (in addition to the root requirements.txt)
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9

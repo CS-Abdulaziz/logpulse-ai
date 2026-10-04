@@ -1,0 +1,26 @@
+{
+  "scenario": "hdfs_corruption",
+  "description": "HDFS block corruption escalating to DataNode failure and data loss risk",
+  "logs": [
+    {
+      "delay": 0,
+      "level": "INFO",
+      "message": "HDFS NameNode started, block pool initialized with 48291 blocks across 6 DataNodes"
+    },
+    {
+      "delay": 2,
+      "level": "WARN",
+      "message": "HDFS: block report delayed 18s on DataNode dn3.cluster.local — network congestion suspected"
+    },
+    {
+      "delay": 2,
+      "level": "ERROR",
+      "message": "HDFS: block blk_1073741825 is corrupt on DataNode dn3.cluster.local — checksum mismatch"
+    },
+    {
+      "delay": 3,
+      "level": "FATAL",
+      "message": "HDFS: DataNode failed to read block blk_1073741825 — 3 replicas unavailable, data loss risk"
+    }
+  ]
+}

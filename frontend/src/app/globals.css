@@ -1,0 +1,195 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── LogPulse AI Design Tokens ──────────────────────────────────────────── */
+
+@theme inline {
+  /* Fonts */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-inter);
+
+  /* ── Colors ── */
+
+  /* Foundational surfaces */
+  --color-background:        #000000;
+  --color-surface:           #121212;
+  --color-surface-elevated:  #1a1a1a;
+  --color-border:            #222222;
+  --color-border-active:     #8B5CF6;
+
+  /* Functional accents */
+  --color-accent-ai:         #8B5CF6;   /* indigo — AI/ML/primary */
+  --color-accent-success:    #10B981;   /* emerald — healthy */
+  --color-accent-warning:    #F59E0B;   /* amber — non-critical warn */
+  --color-accent-critical:   #EF4444;   /* crimson — critical failure */
+  --color-accent-info:       #3B82F6;   /* blue — informational */
+
+  /* shadcn/ui token overrides */
+  --color-foreground:        #FFFFFF;
+  --color-card:              #121212;
+  --color-card-foreground:   #FFFFFF;
+  --color-popover:           #1a1a1a;
+  --color-popover-foreground:#FFFFFF;
+  --color-primary:           #8B5CF6;
+  --color-primary-foreground:#FFFFFF;
+  --color-secondary:         #1a1a1a;
+  --color-secondary-foreground: rgba(255,255,255,0.7);
+  --color-muted:             #121212;
+  --color-muted-foreground:  rgba(255,255,255,0.5);
+  --color-accent:            #1a1a1a;
+  --color-accent-foreground: rgba(255,255,255,0.7);
+  --color-destructive:       #EF4444;
+  --color-input:             #000000;
+  --color-ring:              #8B5CF6;
+
+  /* Chart palette */
+  --color-chart-1:           #EF4444;   /* critical/memory */
+  --color-chart-2:           #F59E0B;   /* warning/db */
+  --color-chart-3:           #8B5CF6;   /* ai/security */
+  --color-chart-4:           #3B82F6;   /* info/node */
+  --color-chart-5:           #10B981;   /* success */
+
+  /* Sidebar */
+  --color-sidebar:                    #000000;
+  --color-sidebar-foreground:         rgba(255,255,255,0.5);
+  --color-sidebar-primary:            #8B5CF6;
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent:             #121212;
+  --color-sidebar-accent-foreground:  #FFFFFF;
+  --color-sidebar-border:             #222222;
+  --color-sidebar-ring:               #8B5CF6;
+
+  /* ── Radius: 0px everywhere (sharp corners) ── */
+  --radius:     0px;
+  --radius-sm:  0px;
+  --radius-md:  0px;
+  --radius-lg:  0px;
+  --radius-xl:  0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
+
+  /* Spacing rhythm (4px unit) */
+  --spacing-sidebar: 240px;
+  --spacing-topnav:  48px;
+}
+
+/* ─── Base resets ────────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply h-full antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    background-color: #000000;
+    color: #FFFFFF;
+    @apply min-h-full font-sans;
+  }
+
+  /* Monospace for all data, logs, code, metrics */
+  code, pre, kbd, samp,
+  .font-mono {
+    font-family: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+  }
+}
+
+/* ─── Status Dot Animations ──────────────────────────────────────────────── */
+
+@keyframes pulse-ring {
+  0%   { transform: scale(1);   opacity: 0.15; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes pulse-ring-slow {
+  0%   { transform: scale(1);   opacity: 0.2; }
+  50%  { transform: scale(2);   opacity: 0.1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.status-dot-healthy  { background-color: #10B981; }
+.status-dot-warning  { background-color: #F59E0B; }
+.status-dot-offline  { background-color: rgba(255,255,255,0.3); }
+
+.status-dot-critical {
+  background-color: #EF4444;
+}
+.status-dot-critical::after,
+.status-dot-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-ring 2s ease-out infinite;
+}
+.status-dot-critical::after { background: #EF4444; }
+.status-dot-live::after     { background: #10B981; }
+.status-dot-live            { background-color: #10B981; }
+
+/* ─── Scrollbar styling ──────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #222222;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #333333;
+}
+
+/* ─── Code block base ────────────────────────────────────────────────────── */
+
+.code-block {
+  background: #0a0a0a;
+  border: 1px solid #222222;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* ─── Severity badge fill variants ──────────────────────────────────────── */
+
+.badge-critical {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid #EF4444;
+  color: #EF4444;
+}
+.badge-warn {
+  background: rgba(245,158,11,0.15);
+  border: 1px solid #F59E0B;
+  color: #F59E0B;
+}
+.badge-info {
+  background: rgba(59,130,246,0.15);
+  border: 1px solid #3B82F6;
+  color: #3B82F6;
+}
+.badge-success {
+  background: rgba(16,185,129,0.15);
+  border: 1px solid #10B981;
+  color: #10B981;
+}

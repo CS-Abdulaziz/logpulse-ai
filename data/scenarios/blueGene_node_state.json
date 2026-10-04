@@ -1,0 +1,54 @@
+{
+  "scenario": "blueGene_node",
+  "pods": {},
+  "deployments": {},
+  "nodes": {
+    "R00-M0-N04": {
+      "name": "R00-M0-N04",
+      "status": "NotReady",
+      "roles": "compute",
+      "age": "30d",
+      "version": "BGQ-2.0.0",
+      "temperature": 87.5,
+      "hardware_faults": 47,
+      "online": false
+    },
+    "R00-M0-N01": {
+      "name": "R00-M0-N01",
+      "status": "Ready",
+      "roles": "compute",
+      "age": "30d",
+      "version": "BGQ-2.0.0",
+      "temperature": 65.0,
+      "hardware_faults": 0,
+      "online": true
+    }
+  },
+  "bluegene": {
+    "nodes": [
+      {
+        "name": "R00-M0-N04",
+        "status": "NotReady",
+        "roles": "compute",
+        "age": "30d",
+        "version": "BGQ-2.0.0",
+        "temperature": 87.5,
+        "hardware_faults": 47,
+        "online": false
+      },
+      {
+        "name": "R00-M0-N01",
+        "status": "Ready",
+        "roles": "compute",
+        "age": "30d",
+        "version": "BGQ-2.0.0",
+        "temperature": 65.0,
+        "hardware_faults": 0,
+        "online": true
+      }
+    ],
+    "jobs_killed": 16,
+    "jobs_rescheduled": 16
+  },
+  "free_mem_mb": 8192
+}

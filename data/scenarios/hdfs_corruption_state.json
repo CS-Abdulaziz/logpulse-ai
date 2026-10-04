@@ -1,0 +1,28 @@
+{
+  "scenario": "hdfs_corruption",
+  "pods": {},
+  "deployments": {},
+  "nodes": {},
+  "hdfs": {
+    "total_blocks": 48291,
+    "datanodes": [
+      "dn1.cluster.local",
+      "dn2.cluster.local",
+      "dn3.cluster.local",
+      "dn4.cluster.local",
+      "dn5.cluster.local",
+      "dn6.cluster.local"
+    ],
+    "corrupt_blocks": [
+      {
+        "block_id": "blk_1073741825",
+        "datanode": "dn3.cluster.local",
+        "corrupt": true,
+        "replicas": 0
+      }
+    ],
+    "missing_blocks": 1,
+    "healthy": false
+  },
+  "free_mem_mb": 4096
+}
